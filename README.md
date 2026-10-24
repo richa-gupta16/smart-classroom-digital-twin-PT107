@@ -44,7 +44,7 @@ smart-classroom-digital-twin-PT107/
 
 1. Clone the repository:
 ```
-git clone https://github.com/<username>/smart-classroom-digital-twin-PT107.git
+git clone https://github.com/richa-gupta16/smart-classroom-digital-twin-PT107.git
 cd smart-classroom-digital-twin-PT107
 ```
 

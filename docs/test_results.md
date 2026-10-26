@@ -82,9 +82,38 @@ Conditions and limits:
 
 ## 5. Occupancy ML model
 
-Status: **Pending.** Train/test split, model training and evaluation have not been done yet.
+Script: `ml/train_baseline.py`.
+ Model: random forest (200 trees, balanced class weights), 7 features from the message format (temperature, light, sound, CO2, CO2 slope, PIR 1, PIR 2). Timestamp and hour are not used as features.
 
-To be recorded: accuracy, per-class precision/recall/F1, confusion matrix, and comparison with a PIR-only baseline.
+Split by whole days, because adjacent 30 s readings are near-identical and a random split would leak information:
+- Train: 22, 24, 25, 26 Dec 2017 (5,305 rows)
+- Test: 23 Dec 2017, 10 Jan and 11 Jan 2018 (4,824 rows; classes 0/1/2/3 = 3,748 / 254 / 491 / 331)
+
+Occupied vs. empty (test set):
+
+| Method | Precision | Recall | F1 | Accuracy |
+|---|---|---|---|---|
+| PIR rule (either sensor = 1) | 0.98 | 0.56 | 0.72 | 0.90 |
+| Random forest | 1.00 | 0.71 | 0.83 | 0.94 |
+
+Occupancy count, 0 to 3 people (random forest): accuracy 0.893, macro F1 0.68. Always predicting "empty" gives 0.777.
+
+| People | Precision | Recall | F1 |
+|---|---|---|---|
+| 0 | 0.92 | 1.00 | 0.96 |
+| 1 | 0.82 | 0.44 | 0.57 |
+| 2 | 0.82 | 0.66 | 0.73 |
+| 3 | 0.54 | 0.39 | 0.45 |
+
+Feature importance: light 0.392, CO2 0.232, temperature 0.188, CO2 slope 0.104, sound 0.055, PIR 2 0.025, PIR 1 0.004.
+
+Evidence: `docs/confusion_matrix.png`
+
+Limitations:
+- About 29% of occupied readings are missed, so control logic needs a delay before switching off.
+- Class "1 person" appears only on 2 dates and class "3" mostly on 3, so per-class scores are indicative.
+- Only 22 Dec has occupied rows in training. The dataset is from a small room, not a classroom.
+- Temperature has high importance and may reflect weather or season rather than occupancy. Checked in`ml/train_baseline.py`.
 
 ## 6. 3D twin and live synchronization
 

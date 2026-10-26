@@ -137,6 +137,27 @@ Findings:
 - The overall improvement comes from 23 Dec. On 10 Jan, recall falls, so the model generalizes poorly to a day recorded 3 weeks after the training days.
 - 23 Dec supplies 782 of the 1,076 occupied test rows, so overall figures are dominated by one day.
 
+### Leave-one-occupied-day-out evaluation (`ml/train_cv.py`)
+
+Each of the three days with people was held out in turn and the model (variant C features) was trained on all other days.
+
+| Held-out day | Occupied rows | Occupied precision | Occupied recall | Occupied F1 | Count acc. | Count macro F1 |
+|---|---|---|---|---|---|---|
+| 22 Dec 2017 | 825 | 0.977 | 0.979 | 0.978 | 0.863 | 0.841 |
+| 23 Dec 2017 | 782 | 0.971 | 0.978 | 0.975 | 0.925 | 0.808 |
+| 10 Jan 2018 | 294 | 1.000 | 0.374 | 0.545 | 0.757 | 0.518 |
+| Mean of folds | | 0.983 | 0.777 | 0.833 | 0.848 | 0.722 |
+
+Findings:
+- Occupied recall is about 0.98 on 22 and 23 Dec but 0.374 on 10 Jan, so performance on a day recorded 3 weeks later is much worse. The mean hides this spread.
+- On 10 Jan, precision is 1.000: the model never predicts people in an empty room, but misses most occupied readings.
+- Mean sensor values on occupied rows: light 120.8 (22 Dec), 96.3 (23 Dec), 58.7 (10 Jan); sound 0.50, 0.42, 0.30; CO2 775.8, 655.0, 639.6 ppm. Light was the most important feature in the model, and it is about half as bright on 10 Jan. This is a likely explanation, not a proven cause.
+- Only three days contain people, so these estimates are uncertain. The dataset is from a small room, not a classroom.
+
+Consequence for control: the model errs towards "empty". The control logic therefore uses a hold-off delay before switching off and a PIR override (any PIR trigger counts as occupied).
+
+The final model (`ml/save_model.py`) is trained on all 7 days, so it has no held-out test set; the table above is the performance estimate.
+
 ## 6. 3D twin and live synchronization
 
 Status: **Pending.** Blender model and dashboard are in progress. Message-to-display latency has not been measured yet.

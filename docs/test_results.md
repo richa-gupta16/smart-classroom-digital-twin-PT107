@@ -115,6 +115,28 @@ Limitations:
 - Only 22 Dec has occupied rows in training. The dataset is from a small room, not a classroom.
 - Temperature has high importance and may reflect weather or season rather than occupancy. Checked in`ml/train_baseline.py`.
 
+### Feature experiments (`ml/train_v2.py`)
+
+Same train/test split. Variant A: 7 base features. Variant B: A plus rolling means over the previous 10 readings (about 5 min, past data only) of PIR, sound, CO2 and light. Variant C: B without temperature.
+
+| Variant | Count acc. | Count macro F1 | Occupied precision | Occupied recall | Occupied F1 |
+|---|---|---|---|---|---|
+| A | 0.893 | 0.679 | 0.997 | 0.713 | 0.831 |
+| B | 0.885 | 0.675 | 0.992 | 0.775 | 0.870 |
+| C | 0.892 | 0.703 | 0.991 | 0.778 | 0.871 |
+
+Per-day occupied recall:
+
+| Test day | Occupied rows | A | B | C |
+|---|---|---|---|---|
+| 23 Dec 2017 | 782 | 0.811 | 0.926 | 0.930 |
+| 10 Jan 2018 | 294 | 0.452 | 0.374 | 0.374 |
+
+Findings:
+- Rolling features improve overall occupied recall (0.713 to 0.775), and removing temperature has no meaningful effect, so variant C is used.
+- The overall improvement comes from 23 Dec. On 10 Jan, recall falls, so the model generalizes poorly to a day recorded 3 weeks after the training days.
+- 23 Dec supplies 782 of the 1,076 occupied test rows, so overall figures are dominated by one day.
+
 ## 6. 3D twin and live synchronization
 
 Status: **Pending.** Blender model and dashboard are in progress. Message-to-display latency has not been measured yet.

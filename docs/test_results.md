@@ -28,6 +28,12 @@ Class distribution of `Room_Occupancy_Count`:
 
 Observation: the classes are heavily imbalanced. A model that always predicts "empty" would reach about 81% accuracy, so model evaluation must use precision, recall, F1 and a confusion matrix, not accuracy alone.
 
+Time structure (`ml/check_time.py`):
+- 7 distinct dates in three recording blocks (22-24 Dec, 25-26 Dec, 10-11 Jan), separated by gaps of 1 day and 15 days.
+- Within a block, readings are continuous at 30-31 s intervals (9,987 of 10,129 gaps).
+- Occupied periods exist only on 22 Dec, 23 Dec and 10 Jan. Class "1 person" appears only on 22 and 23 Dec.
+- Because adjacent readings are near-identical, a random split would leak information, so train and test are split by whole days.
+
 ## 2. Replay streamer
 
 Script: `streamer/replay.py`

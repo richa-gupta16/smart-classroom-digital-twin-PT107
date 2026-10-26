@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Smart Classroom Digital Twin</title>
+<style>
+  body { margin: 0; overflow: hidden; font-family: Arial, sans-serif; background: #1b1f27; }
+  #panel { position: absolute; top: 12px; left: 12px; background: rgba(0,0,0,0.65);
+           color: #fff; padding: 12px 16px; border-radius: 8px; font-size: 14px; line-height: 1.6; min-width: 260px; }
+  #panel h3 { margin: 0 0 6px 0; font-size: 16px; }
+  .on { color: #7CFC9A; } .off { color: #ff8a80; }
+</style>
+</head>
+<body>
+<div id="panel">Waiting for data...</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ---------- Scene ----------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1b1f27);
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 100);
+camera.position.set(7, 6, 9);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+document.body.appendChild(renderer.domElement);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 1, 0);
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.35));
+
+// ---------- Room (8 m x 6 m x 3 m) ----------
+const mat = (c) => new THREE.MeshStandardMaterial({ color: c });
+const floor = new THREE.Mesh(new THREE.BoxGeometry(8, 0.1, 6), mat(0x8a8f98));
+floor.position.y = -0.05; scene.add(floor);
+const backWall = new THREE.Mesh(new THREE.BoxGeometry(8, 3, 0.1), mat(0xd9dde3));
+backWall.position.set(0, 1.5, -3); scene.add(backWall);
+const leftWall = new THREE.Mesh(new THREE.BoxGeometry(0.1, 3, 6), mat(0xc9ced6));
+leftWall.position.set(-4, 1.5, 0); scene.add(leftWall);
+
+// Desks: 3 rows x 4
+for (let row = 0; row < 3; row++) {
+  for (let col = 0; col < 4; col++) {
+    const desk = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.75, 0.6), mat(0x9b6b3c));
+    desk.position.set(-2.7 + col * 1.8, 0.375, -1.6 + row * 1.6);
+    scene.add(desk);
+  }
+}
+
+// AC unit on the back wall
+const ac = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.4, 0.3), mat(0x888888));
+ac.position.set(2.2, 2.5, -2.85); scene.add(ac);
+
+// Ceiling lights (4)
+const lightMeshes = [], lightSources = [];
+[[-2, -1.5], [2, -1.5], [-2, 1.5], [2, 1.5]].forEach(([x, z]) => {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.06, 0.4),
+    new THREE.MeshStandardMaterial({ color: 0x555555, emissive: 0x000000 }));
+  m.position.set(x, 2.95, z); scene.add(m); lightMeshes.push(m);
+  const p = new THREE.PointLight(0xfff2cc, 0, 12);
+  p.position.set(x, 2.6, z); scene.add(p); lightSources.push(p);
+});
+
+// People (capsules): predicted count 0-3 decides how many are visible
+const spots = [[-2.7, -1.0], [0.9, 0.6], [2.7, 2.2]];
+const people = spots.map(([x, z]) => {
+  const p = new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 0.8, 4, 8), mat(0x4aa3ff));
+  p.position.set(x, 0.65, z); p.visible = false; scene.add(p);
+  return p;
+});
+
+// ---------- Live updates ----------
+const panel = document.getElementById('panel');
+let lastId = null;
+const latencies = [];
+
+function applyState(r) {
+  const predicted = r.predicted_occupancy ?? 0;
+  const occupied = predicted > 0;
+  people.forEach((p, i) => { p.visible = i < predicted; });
+  // Simple placeholder rule: lights and AC on when occupied.
+  // The real control logic (hold-off delay, PIR override) comes from the simulation module.
+  lightMeshes.forEach(m => m.material.emissive.setHex(occupied ? 0xffe9a8 : 0x000000));
+  lightSources.forEach(p => { p.intensity = occupied ? 25 : 0; });
+  ac.material.color.setHex(occupied ? 0x3ec6ff : 0x888888);
+
+  const avg = latencies.length ? latencies.reduce((a, b) => a + b, 0) / latencies.length : 0;
+  const max = latencies.length ? Math.max(...latencies) : 0;
+  panel.innerHTML = `
+    <h3>Classroom 1 (live)</h3>
+    Time: ${r.timestamp}<br>
+    Temperature: ${r.temperature} &deg;C<br>
+    Light: ${r.light} &nbsp; CO2: ${r.co2} ppm<br>
+    PIR: ${r.pir_1} / ${r.pir_2}<br>
+    Predicted people: <b>${predicted}</b> &nbsp; Actual: ${r.true_occupancy}<br>
+    Lights / AC: <span class="${occupied ? 'on' : 'off'}">${occupied ? 'ON' : 'OFF'}</span><br>
+    Update delay (n=${latencies.length}): avg ${avg.toFixed(0)} ms, max ${max.toFixed(0)} ms`;
+}
+
+async function poll() {
+  try {
+    const r = await (await fetch('/readings/latest')).json();
+    if (r.id !== undefined && r.id !== lastId) {
+      lastId = r.id;
+      if (r.received_ms) latencies.push(Date.now() - r.received_ms);
+      applyState(r);
+    }
+  } catch (e) { /* server not running yet */ }
+}
+setInterval(poll, 300);
+
+(function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+})();
+</script>
+</body>
+</html>

@@ -160,7 +160,31 @@ The final model (`ml/save_model.py`) is trained on all 7 days, so it has no held
 
 ## 6. 3D twin and live synchronization
 
-Status: **Pending.** Blender model and dashboard are in progress. Message-to-display latency has not been measured yet.
+Status: working prototype. The room is built from Three.js primitives (a Blender model is not yet integrated).
+
+Pipeline tested end-to-end: replay streamer -> FastAPI backend (random forest predicts occupancy per reading) -> SQLite -> browser dashboard polling `/readings/latest` every 300 ms.
+
+Dashboard behaviour observed:
+- Empty room: predicted 0, lights and AC shown OFF.
+- Occupied room: capsules appear for the predicted count (1, 2, 3 people), lights and AC shown ON.
+- Panel shows time, temperature, light, CO2, PIR values, predicted vs. actual count, and update delay.
+
+Update delay (server stores reading -> dashboard shows it), replay of 22 Dec 2017 at 0.5 s per message:
+
+| Metric | Result |
+|---|---|
+| Readings measured | 429 (at time of screenshot) |
+| Average delay | 221 ms |
+| Maximum delay | 752 ms |
+
+The delay includes the dashboard's own 300 ms polling interval, so true processing delay is lower.
+
+Limits:
+- The demo replays 22 Dec, which is in the model's training data, so predicted-vs-actual agreement on the dashboard is not a performance measure. Model performance is reported in section 5.
+- Lights and AC currently follow a placeholder rule (on whenever the prediction is occupied). The hold-off delay and PIR override are not yet implemented.
+- Delay was measured on one machine with the server and browser running locally.
+
+Evidence: `docs/dashboard_empty.png`, `docs/dashboard_one_person.png`, `docs/dashboard_two_people.png`, demo video (Drive link in the form).
 
 ## 7. Energy simulation and comfort
 

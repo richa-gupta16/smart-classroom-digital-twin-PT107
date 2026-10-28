@@ -1,0 +1,5 @@
+strategy,hours_on,kWh,occupied_time_lights_off_%,off_events_while_occupied,total_off_events,saving_vs_fixed_%
+"Model + PIR, hold 5 min",18.4,12.42,0.0,0,16,41.4
+"Model + PIR, hold 10 min",19.8,13.32,0.0,0,14,37.2
+"Model + PIR, hold 15 min",20.9,14.1,0.0,0,13,33.5
+"Model + PIR, hold 30 min",24.0,16.2,0.0,0,11,23.6

@@ -188,19 +188,52 @@ Evidence: `docs/dashboard_empty.png`, `docs/dashboard_one_person.png`, `docs/das
 
 ## 7. Energy simulation
 
-Script: `simulation/energy_sim.py`. This is a simulation on the 7 days of the UCI Room Occupancy Estimation dataset, not a measured classroom.
+Script: `simulation/energy_sim.py`. This is a simulation on 87.4 hours of recorded data (7 dates) from the UCI Room Occupancy Estimation dataset, not a measured classroom.
 
-Assumptions (sources in `docs/energy_assumptions.md`): 4 fixtures x ___ W, AC ___ kW while running. AC modelled as on/off at constant power; no thermal model.
+Assumptions (sources in `docs/energy_assumptions.md`): 4 light fixtures x 36 W; AC at 0.53 kW average input while running; combined 0.674 kW. Lights and AC switch together on one on/off signal; no thermal model.
 
-Occupancy predictions for each day come from a model trained on the other six days. Control: lights and AC switch on when occupancy is detected, and off after the hold-off time without detection. A PIR trigger always counts as occupied.
+Occupancy predictions for each day come from a model trained on the other six days. A PIR trigger always counts as occupied. Hold-off = minutes without detection before switching off.
 
-(Paste the results table here: strategy, hours on, kWh, saving vs. each baseline, occupied time with lights off, off-events while occupied.)
+| Strategy | Hours on | kWh | Saving vs. fixed schedule | Occupied time with lights off |
+|---|---|---|---|---|
+| Always on | 87.4 | 58.88 | -177.7% | 0.0% |
+| Fixed 08:00-18:00 | 31.5 | 21.20 | 0.0% | 21.0% |
+| Lecture timetable | 8.7 | 5.86 | 72.4% | 84.4% |
+| PIR only, hold 10 min | 18.6 | 12.57 | 40.7% | 0.3% |
+| Model only, hold 10 min | 17.2 | 11.60 | 45.3% | 9.8% |
+| Model + PIR override, hold 10 min | 19.8 | 13.32 | 37.2% | 0.0% |
+| Perfect knowledge (upper bound), hold 10 min | 17.2 | 11.59 | 45.3% | 0.0% |
+
+Hold-off sweep, model + PIR override:
+
+| Hold-off | Hours on | kWh | Occupied time with lights off | Saving vs. fixed |
+|---|---|---|---|---|
+| 5 min | 18.4 | 12.42 | 0.0% | 41.4% |
+| 10 min | 19.8 | 13.32 | 0.0% | 37.2% |
+| 15 min | 20.9 | 14.10 | 0.0% | 33.5% |
+| 30 min | 24.0 | 16.20 | 0.0% | 23.6% |
+
+Short hold-off sweep, PIR only vs. model + PIR override:
+
+| Hold-off | PIR only: hours on | kWh | Occupied time dark | Saving vs. fixed | Model + PIR: hours on | kWh | Occupied time dark | Saving vs. fixed |
+|---|---|---|---|---|---|---|---|---|
+| 1 min | 12.7 | 8.57 | 24.5% | 59.6% | 17.0 | 11.44 | 2.0% | 46.0% |
+| 2 min | 15.0 | 10.09 | 12.0% | 52.4% | 17.5 | 11.77 | 0.8% | 44.5% |
+| 3 min | 16.1 | 10.86 | 6.3% | 48.8% | 17.8 | 12.01 | 0.3% | 43.3% |
+| 5 min | 17.3 | 11.69 | 1.5% | 44.9% | 18.4 | 12.42 | 0.0% | 41.4% |
+| 10 min | 18.6 | 12.57 | 0.3% | 40.7% | 19.8 | 13.32 | 0.0% | 37.2% |
 
 Findings:
-- (what the numbers show, including the PIR vs. model + PIR comparison)
+- Occupancy-based control used 37-45% less energy than the fixed 08:00-18:00 schedule in this simulation, while the fixed schedule left 21% of occupied time without lights and the lecture timetable left 84%, because the room was used outside those hours.
+- The occupancy model alone saved 45.3% but left people without lights 9.8% of the time (the model misses most occupied readings on 10 Jan). Adding the PIR override reduced this to 0.0% at a cost of 8 percentage points of savings.
+- - At a 10-minute hold-off, PIR alone (40.7% saving, 0.3% of occupied time dark) was close to model + PIR (37.2%, 0.0%). The model's advantage appears at shorter hold-offs: model + PIR with a 3-minute hold-off left 0.3% of occupied time dark and saved 43.3% (12.01 kWh), against 40.7% (12.57 kWh) for PIR alone at 10 minutes, about 4.5% less energy at the same comfort level. PIR alone with 1-2 minute hold-offs saved 52-60% but left 12-25% of occupied time dark.
+- The gain is modest (about 1-3 percentage points at matched comfort). Hold-off values were examined on the same data used to evaluate them, and only three days contain people, so this is indicative, not conclusive.
+- Longer hold-offs cost energy without improving comfort here: 5 min saved 41.4%, 30 min saved 23.6%.
+- Percentage savings do not depend on the power values, because lights and AC switch together; only absolute kWh do.
 
 Limits:
-- Only 7 days of data, 3 of them with people, from a small room in December and January.
-- Savings depend on the chosen baseline and on the room being empty about 81% of the time.
-- Temperature comfort is not simulated.
-- The model's most important feature is the light sensor reading, which in a real closed-loop system would itself change when the controller switches the lights. This was not tested here.
+- Only 87.4 hours of data from a small room (3 dates with people), recorded in December and January. The room is empty about 81% of the time.
+- Savings depend on the chosen baseline. Savings against "always on" (77-80%) are inflated by night-time hours and are not used as the headline.
+- AC is modelled as constant average power; temperature comfort is not simulated.
+- In a real room, switching lights off would change the light sensor value that the model depends on. This feedback is not simulated.
+- The "off events while occupied" count only registers switch-offs that happen while someone is present, so it understates time spent in the dark; occupied-time-with-lights-off is the comfort measure.

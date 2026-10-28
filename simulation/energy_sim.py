@@ -11,8 +11,8 @@ from timetable import is_scheduled
 
 # ---- Fill these from docs/energy_assumptions.md (with sources) ----
 LIGHT_FIXTURES = 4
-LIGHT_WATTS_EACH = None   # watts per fixture
-AC_KW = None              # electrical input in kW while running
+LIGHT_WATTS_EACH = 36   # watts per fixture
+AC_KW = 0.53             # electrical input in kW while running
 # ---------------------------------------------------------------------
 
 HOLD_MIN = 10             # minutes of "empty" before switching off
@@ -119,3 +119,13 @@ print(sweep.to_string(index=False))
 res.to_csv("simulation/energy_results.csv", index=False)
 sweep.to_csv("simulation/holdoff_sweep.csv", index=False)
 print("\nSaved simulation/energy_results.csv and simulation/holdoff_sweep.csv")
+print("\nShort hold-off sweep: PIR only vs. model + PIR")
+short = []
+for h in [1, 2, 3, 5, 10]:
+    short.append(summarise(f"PIR only, hold {h} min", control(sig_pir, h)))
+    short.append(summarise(f"Model + PIR, hold {h} min", control(sig_model | sig_pir, h)))
+short = pd.DataFrame(short)
+short["saving_vs_fixed_%"] = (100 * (1 - short["kWh"] / fixed)).round(1)
+print(short[["strategy", "hours_on", "kWh", "occupied_time_lights_off_%",
+             "saving_vs_fixed_%"]].to_string(index=False))
+short.to_csv("simulation/short_holdoff_sweep.csv", index=False)

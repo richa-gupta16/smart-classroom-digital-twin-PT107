@@ -1,0 +1,8 @@
+strategy,hours_on,kWh,occupied_time_lights_off_%,off_events_while_occupied,total_off_events,saving_vs_fixed_%,saving_vs_always_%
+Baseline: always on,87.4,58.88,0.0,0,0,-177.7,0.0
+Baseline: fixed 08:00-18:00,31.5,21.2,21.0,2,4,0.0,64.0
+Baseline: lecture timetable,8.7,5.86,84.4,3,5,72.4,90.0
+"PIR only, hold 10 min",18.6,12.57,0.3,0,13,40.7,78.7
+"Model only, hold 10 min",17.2,11.6,9.8,0,10,45.3,80.3
+"Model + PIR override, hold 10 min",19.8,13.32,0.0,0,14,37.2,77.4
+"Perfect knowledge (upper bound), hold 10 min",17.2,11.59,0.0,0,5,45.3,80.3

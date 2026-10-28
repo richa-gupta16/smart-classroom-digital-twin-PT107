@@ -186,6 +186,21 @@ Limits:
 
 Evidence: `docs/dashboard_empty.png`, `docs/dashboard_one_person.png`, `docs/dashboard_two_people.png`, demo video (Drive link in the form).
 
-## 7. Energy simulation and comfort
+## 7. Energy simulation
 
-Status: **Pending.** Baseline vs. occupancy-based control (kWh) and comfort compliance have not been measured yet. Results will be labeled as simulation results.
+Script: `simulation/energy_sim.py`. This is a simulation on the 7 days of the UCI Room Occupancy Estimation dataset, not a measured classroom.
+
+Assumptions (sources in `docs/energy_assumptions.md`): 4 fixtures x ___ W, AC ___ kW while running. AC modelled as on/off at constant power; no thermal model.
+
+Occupancy predictions for each day come from a model trained on the other six days. Control: lights and AC switch on when occupancy is detected, and off after the hold-off time without detection. A PIR trigger always counts as occupied.
+
+(Paste the results table here: strategy, hours on, kWh, saving vs. each baseline, occupied time with lights off, off-events while occupied.)
+
+Findings:
+- (what the numbers show, including the PIR vs. model + PIR comparison)
+
+Limits:
+- Only 7 days of data, 3 of them with people, from a small room in December and January.
+- Savings depend on the chosen baseline and on the room being empty about 81% of the time.
+- Temperature comfort is not simulated.
+- The model's most important feature is the light sensor reading, which in a real closed-loop system would itself change when the controller switches the lights. This was not tested here.

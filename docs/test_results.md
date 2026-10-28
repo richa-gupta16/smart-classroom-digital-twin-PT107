@@ -160,8 +160,47 @@ The final model (`ml/save_model.py`) is trained on all 7 days, so it has no held
 
 ## 6. 3D twin and live synchronization
 
-Status: **Pending.** Blender model and dashboard are in progress. Message-to-display latency has not been measured yet.
+Status: working prototype. The room is built from Three.js primitives (a Blender model is not yet integrated).
 
-## 7. Energy simulation and comfort
+Pipeline tested end-to-end: replay streamer -> FastAPI backend (random forest predicts occupancy per reading) -> SQLite -> browser dashboard polling `/readings/latest` every 300 ms.
 
-Status: **Pending.** Baseline vs. occupancy-based control (kWh) and comfort compliance have not been measured yet. Results will be labeled as simulation results.
+Dashboard behaviour observed:
+- Empty room: predicted 0, lights and AC shown OFF.
+- Occupied room: capsules appear for the predicted count (1, 2, 3 people), lights and AC shown ON.
+- Panel shows time, temperature, light, CO2, PIR values, predicted vs. actual count, and update delay.
+
+Update delay (server stores reading -> dashboard shows it), replay of 22 Dec 2017 at 0.5 s per message:
+
+| Metric | Result |
+|---|---|
+| Readings measured | 429 (at time of screenshot) |
+| Average delay | 221 ms |
+| Maximum delay | 752 ms |
+
+The delay includes the dashboard's own 300 ms polling interval, so true processing delay is lower.
+
+Limits:
+- The demo replays 22 Dec, which is in the model's training data, so predicted-vs-actual agreement on the dashboard is not a performance measure. Model performance is reported in section 5.
+- Lights and AC currently follow a placeholder rule (on whenever the prediction is occupied). The hold-off delay and PIR override are not yet implemented.
+- Delay was measured on one machine with the server and browser running locally.
+
+Evidence: `docs/dashboard_empty.png`, `docs/dashboard_one_person.png`, `docs/dashboard_two_people.png`, demo video (Drive link in the form).
+
+## 7. Energy simulation
+
+Script: `simulation/energy_sim.py`. This is a simulation on the 7 days of the UCI Room Occupancy Estimation dataset, not a measured classroom.
+
+Assumptions (sources in `docs/energy_assumptions.md`): 4 fixtures x ___ W, AC ___ kW while running. AC modelled as on/off at constant power; no thermal model.
+
+Occupancy predictions for each day come from a model trained on the other six days. Control: lights and AC switch on when occupancy is detected, and off after the hold-off time without detection. A PIR trigger always counts as occupied.
+
+(Paste the results table here: strategy, hours on, kWh, saving vs. each baseline, occupied time with lights off, off-events while occupied.)
+
+Findings:
+- (what the numbers show, including the PIR vs. model + PIR comparison)
+
+Limits:
+- Only 7 days of data, 3 of them with people, from a small room in December and January.
+- Savings depend on the chosen baseline and on the room being empty about 81% of the time.
+- Temperature comfort is not simulated.
+- The model's most important feature is the light sensor reading, which in a real closed-loop system would itself change when the controller switches the lights. This was not tested here.

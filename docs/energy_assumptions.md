@@ -11,7 +11,7 @@ These values are used by `simulation/energy_sim.py`. The results are a simulatio
 | Power per light fixture | 36 W | Philips Essential Full Glow 2x2 Recessed LED Panel (Model: RC360B LED36S), [Jainsons Lights](https://jainsonslightsonline.com/products/philips-essential-full-glow-2x2-panel-36w-rc360b-led36s), accessed 28-10-2026 |
 
 
-| Split AC average electrical input while running | 0.53 kW | Carrier CAI18CE3R36W0 1.5 Ton 3 Star Inverter Split AC. BEE label annual consumption 854.39 kWh / 1,600 h assumed by the label = 0.534 kW. <link to the page where you saw 854.39>, accessed 28-10-2026 |
+| Split AC average electrical input while running | 0.53 kW | Carrier CAI18CE3R36W0 1.5 Ton 3 Star Inverter Split AC. BEE label annual consumption 854.39 kWh / 1,600 h assumed by the label = 0.534 kW. [Amazon](https://www.amazon.in/Carrier-Convertible-Geo-Fencing-CAI18CE3R36W0-CAI18CE3R36W1/dp/B0HDTPL9X4), accessed 28-10-2026 |
 
 How the combined power is calculated in the script:
 

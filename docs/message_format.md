@@ -39,4 +39,3 @@ Every part of the system (streamer, backend, ML model, 3D twin, simulation) exch
 - Data source: UCI Room Occupancy Estimation dataset (see README for citation).
 - The streamer replays dataset rows as if they were live sensor readings.
 - The original per-sensor columns (S1 to S4) stay available in the raw data for ML training.
-- Check the units against the dataset's UCI page and correct any that differ.

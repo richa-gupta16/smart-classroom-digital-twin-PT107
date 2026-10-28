@@ -1,8 +1,8 @@
 # Test Results
 
-Results recorded so far for the Digital Twin for Smart Classroom Energy and Occupancy Management project. All tests ran on a local laptop (Windows, Python virtual environment `.venv`), with the streamer and backend on the same machine.
+Results recorded for the Digital Twin for Smart Classroom Energy and Occupancy Management project. All tests ran on a local laptop (Windows, Python virtual environment `.venv`), with the streamer, backend and browser on the same machine. Sensors are replaced by replayed dataset rows, and energy results come from simulation, not from a live classroom.
 
-Last updated: 24-10-2026
+Last updated: 28-10-2026
 
 ## 1. Dataset exploration
 
@@ -26,7 +26,7 @@ Class distribution of `Room_Occupancy_Count`:
 | 2 | 748 | 7.4% |
 | 3 | 694 | 6.9% |
 
-Observation: the classes are heavily imbalanced. A model that always predicts "empty" would reach about 81% accuracy, so model evaluation must use precision, recall, F1 and a confusion matrix, not accuracy alone.
+Observation: the classes are heavily imbalanced. A model that always predicts "empty" would reach about 81% accuracy, so model evaluation uses precision, recall, F1 and a confusion matrix, not accuracy alone.
 
 Time structure (`ml/check_time.py`):
 - 7 distinct dates in three recording blocks (22-24 Dec, 25-26 Dec, 10-11 Jan), separated by gaps of 1 day and 15 days.
@@ -43,7 +43,7 @@ Script: `streamer/replay.py`
 | First 10 rows printed as JSON | Passed. Every message contains exactly the fields in `docs/message_format.md`. |
 | Timestamp spacing | About 30 seconds between messages, as in the dataset |
 
-Observation (small sample, first 10 rows): the true occupancy was 1 in all 10 rows, but the PIR sensors fired in only 2 of them. This shows that PIR alone can miss people who are sitting still, which supports using a model that combines CO2, sound, light and temperature.
+Observation (small sample, first 10 rows): the true occupancy was 1 in all 10 rows, but the PIR sensors fired in only 2 of them. This shows that PIR alone can miss people who are sitting still, which supports using a model that combines CO2, sound and light.
 
 ## 3. Backend functional test
 
@@ -75,6 +75,8 @@ Measure-Command { python streamer/replay.py --limit 10129 --delay 0 --post http:
 | Throughput | about 34.6 readings per second |
 | Average time per reading | about 28.9 ms (HTTP request + database write) |
 
+This test was run before the model prediction step was added to the backend, so it measures request and storage only.
+
 Conditions and limits:
 - Streamer and server ran on the same machine, so there was no network latency.
 - Each message was a separate HTTP request with its own database connection. Throughput could be higher with batching or a persistent connection.
@@ -82,8 +84,9 @@ Conditions and limits:
 
 ## 5. Occupancy ML model
 
-Script: `ml/train_baseline.py`.
- Model: random forest (200 trees, balanced class weights), 7 features from the message format (temperature, light, sound, CO2, CO2 slope, PIR 1, PIR 2). Timestamp and hour are not used as features.
+### 5.1 Baseline experiment (`ml/train_baseline.py`)
+
+Model: random forest (200 trees, balanced class weights) on 7 features from the message format (temperature, light, sound, CO2, CO2 slope, PIR 1, PIR 2). Timestamp and hour are not used as features.
 
 Split by whole days, because adjacent 30 s readings are near-identical and a random split would leak information:
 - Train: 22, 24, 25, 26 Dec 2017 (5,305 rows)
@@ -113,9 +116,9 @@ Limitations:
 - About 29% of occupied readings are missed, so control logic needs a delay before switching off.
 - Class "1 person" appears only on 2 dates and class "3" mostly on 3, so per-class scores are indicative.
 - Only 22 Dec has occupied rows in training. The dataset is from a small room, not a classroom.
-- Temperature has high importance and may reflect weather or season rather than occupancy. Checked in`ml/train_baseline.py`.
+- Temperature has high importance and may reflect weather or season rather than occupancy. This was checked in the feature experiments below (`ml/train_v2.py`).
 
-### Feature experiments (`ml/train_v2.py`)
+### 5.2 Feature experiments (`ml/train_v2.py`)
 
 Same train/test split. Variant A: 7 base features. Variant B: A plus rolling means over the previous 10 readings (about 5 min, past data only) of PIR, sound, CO2 and light. Variant C: B without temperature.
 
@@ -137,7 +140,7 @@ Findings:
 - The overall improvement comes from 23 Dec. On 10 Jan, recall falls, so the model generalizes poorly to a day recorded 3 weeks after the training days.
 - 23 Dec supplies 782 of the 1,076 occupied test rows, so overall figures are dominated by one day.
 
-### Leave-one-occupied-day-out evaluation (`ml/train_cv.py`)
+### 5.3 Leave-one-occupied-day-out evaluation (`ml/train_cv.py`)
 
 Each of the three days with people was held out in turn and the model (variant C features) was trained on all other days.
 
@@ -151,18 +154,18 @@ Each of the three days with people was held out in turn and the model (variant C
 Findings:
 - Occupied recall is about 0.98 on 22 and 23 Dec but 0.374 on 10 Jan, so performance on a day recorded 3 weeks later is much worse. The mean hides this spread.
 - On 10 Jan, precision is 1.000: the model never predicts people in an empty room, but misses most occupied readings.
-- Mean sensor values on occupied rows: light 120.8 (22 Dec), 96.3 (23 Dec), 58.7 (10 Jan); sound 0.50, 0.42, 0.30; CO2 775.8, 655.0, 639.6 ppm. Light was the most important feature in the model, and it is about half as bright on 10 Jan. This is a likely explanation, not a proven cause.
+- Mean sensor values on occupied rows: light 120.8 (22 Dec), 96.3 (23 Dec), 58.7 (10 Jan); sound 0.50, 0.42, 0.30; CO2 775.8, 655.0, 639.6 ppm. Light was the most important feature in the baseline model, and it is about half as bright on 10 Jan. This is a likely explanation, not a proven cause.
 - Only three days contain people, so these estimates are uncertain. The dataset is from a small room, not a classroom.
 
 Consequence for control: the model errs towards "empty". The control logic therefore uses a hold-off delay before switching off and a PIR override (any PIR trigger counts as occupied).
 
-The final model (`ml/save_model.py`) is trained on all 7 days, so it has no held-out test set; the table above is the performance estimate.
+The final model (`ml/save_model.py`, variant C features from `ml/features.py`) is trained on all 7 days, so it has no held-out test set. The tables above are the performance estimate.
 
 ## 6. 3D twin and live synchronization
 
 Status: working prototype. The room is built from Three.js primitives (a Blender model is not yet integrated).
 
-Pipeline tested end-to-end: replay streamer -> FastAPI backend (random forest predicts occupancy per reading) -> SQLite -> browser dashboard polling `/readings/latest` every 300 ms.
+Pipeline tested end-to-end: replay streamer -> FastAPI backend (random forest predicts occupancy per reading, using rolling features over the previous 10 readings per room) -> SQLite -> browser dashboard polling `/readings/latest` every 300 ms.
 
 Dashboard behaviour observed:
 - Empty room: predicted 0, lights and AC shown OFF.
@@ -177,11 +180,11 @@ Update delay (server stores reading -> dashboard shows it), replay of 22 Dec 201
 | Average delay | 221 ms |
 | Maximum delay | 752 ms |
 
-The delay includes the dashboard's own 300 ms polling interval, so true processing delay is lower.
+The delay includes the dashboard's own 300 ms polling interval, so the true processing delay is lower.
 
 Limits:
-- The demo replays 22 Dec, which is in the model's training data, so predicted-vs-actual agreement on the dashboard is not a performance measure. Model performance is reported in section 5.
-- Lights and AC currently follow a placeholder rule (on whenever the prediction is occupied). The hold-off delay and PIR override are not yet implemented.
+- The demo replays 22 Dec, which is in the training data of the saved model, so predicted-vs-actual agreement on the dashboard is not a performance measure. Model performance is reported in section 5.
+- Lights and AC on the dashboard currently follow a placeholder rule (on whenever the prediction is occupied). The hold-off delay and PIR override evaluated in section 7 are not yet implemented in the dashboard.
 - Delay was measured on one machine with the server and browser running locally.
 
 Evidence: `docs/dashboard_empty.png`, `docs/dashboard_one_person.png`, `docs/dashboard_two_people.png`, demo video (Drive link in the form).
@@ -192,7 +195,7 @@ Script: `simulation/energy_sim.py`. This is a simulation on 87.4 hours of record
 
 Assumptions (sources in `docs/energy_assumptions.md`): 4 light fixtures x 36 W; AC at 0.53 kW average input while running; combined 0.674 kW. Lights and AC switch together on one on/off signal; no thermal model.
 
-Occupancy predictions for each day come from a model trained on the other six days. A PIR trigger always counts as occupied. Hold-off = minutes without detection before switching off.
+Occupancy predictions for each day come from a model trained on the other six days. A PIR trigger always counts as occupied in the PIR-based strategies. Hold-off = minutes without detection before switching off.
 
 | Strategy | Hours on | kWh | Saving vs. fixed schedule | Occupied time with lights off |
 |---|---|---|---|---|
@@ -223,10 +226,12 @@ Short hold-off sweep, PIR only vs. model + PIR override:
 | 5 min | 17.3 | 11.69 | 1.5% | 44.9% | 18.4 | 12.42 | 0.0% | 41.4% |
 | 10 min | 18.6 | 12.57 | 0.3% | 40.7% | 19.8 | 13.32 | 0.0% | 37.2% |
 
+Figure: `docs/tradeoff.png` (energy saving against occupied time without lights; generated by `simulation/plot_tradeoff.py`).
+
 Findings:
-- Occupancy-based control used 37-45% less energy than the fixed 08:00-18:00 schedule in this simulation, while the fixed schedule left 21% of occupied time without lights and the lecture timetable left 84%, because the room was used outside those hours.
-- The occupancy model alone saved 45.3% but left people without lights 9.8% of the time (the model misses most occupied readings on 10 Jan). Adding the PIR override reduced this to 0.0% at a cost of 8 percentage points of savings.
-- - At a 10-minute hold-off, PIR alone (40.7% saving, 0.3% of occupied time dark) was close to model + PIR (37.2%, 0.0%). The model's advantage appears at shorter hold-offs: model + PIR with a 3-minute hold-off left 0.3% of occupied time dark and saved 43.3% (12.01 kWh), against 40.7% (12.57 kWh) for PIR alone at 10 minutes, about 4.5% less energy at the same comfort level. PIR alone with 1-2 minute hold-offs saved 52-60% but left 12-25% of occupied time dark.
+- The fixed 08:00-18:00 schedule left 21% of occupied time without lights and the lecture timetable left 84%, because the room was used outside those hours. Occupancy-based strategies with a PIR override left 0.0-0.3% in the dark at hold-offs of 3 to 10 minutes.
+- The occupancy model alone saved 45.3% against the fixed schedule but left people without lights 9.8% of the time (the model misses most occupied readings on 10 Jan). Adding the PIR override reduced this to 0.0% at the 10-minute hold-off, at a cost of 8 percentage points of savings.
+- At a 10-minute hold-off, PIR alone (40.7% saving, 0.3% of occupied time dark) was close to model + PIR (37.2%, 0.0%). The model's advantage appears at shorter hold-offs: model + PIR with a 3-minute hold-off left 0.3% of occupied time dark and saved 43.3% (12.01 kWh), against 40.7% (12.57 kWh) for PIR alone at 10 minutes, about 4.5% less energy at the same comfort level. PIR alone with 1-2 minute hold-offs saved 52-60% but left 12-25% of occupied time dark.
 - The gain is modest (about 1-3 percentage points at matched comfort). Hold-off values were examined on the same data used to evaluate them, and only three days contain people, so this is indicative, not conclusive.
 - Longer hold-offs cost energy without improving comfort here: 5 min saved 41.4%, 30 min saved 23.6%.
 - Percentage savings do not depend on the power values, because lights and AC switch together; only absolute kWh do.
@@ -237,3 +242,10 @@ Limits:
 - AC is modelled as constant average power; temperature comfort is not simulated.
 - In a real room, switching lights off would change the light sensor value that the model depends on. This feedback is not simulated.
 - The "off events while occupied" count only registers switch-offs that happen while someone is present, so it understates time spent in the dark; occupied-time-with-lights-off is the comfort measure.
+
+## 8. Pending work
+
+- Blender classroom model (the dashboard room is built from Three.js shapes).
+- Hold-off and PIR-override control logic in the live dashboard and backend (currently only evaluated offline in section 7).
+- Real sensor hardware and a real classroom deployment (replaced by dataset replay in this project).
+- More occupied days and a classroom-specific dataset to confirm the 10 Jan result and the model-vs-PIR comparison.

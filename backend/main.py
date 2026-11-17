@@ -1,4 +1,4 @@
-import sqlite3
+import os
 import time
 from collections import deque
 from datetime import datetime
@@ -9,11 +9,20 @@ import pandas as pd
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from sqlalchemy import create_engine, text
 
-DB_PATH = "backend/twin.db"
-MODEL_PATH = "ml/occupancy_model.joblib"
+MODEL_PATH = os.getenv("MODEL_PATH", "ml/occupancy_model.joblib")
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///backend/twin.db")
+for prefix in ("postgres://", "postgresql://"):
+    if DATABASE_URL.startswith(prefix):
+        DATABASE_URL = "postgresql+psycopg2://" + DATABASE_URL[len(prefix):]
+        break
+
 WINDOW = 10          # previous 10 readings (about 5 minutes), same as ml/features.py
 GAP_SECONDS = 300    # a gap over 5 minutes starts a new block, same as training
+
+engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_recycle=300)
+IS_SQLITE = engine.url.get_backend_name() == "sqlite"
 
 app = FastAPI(title="Classroom Digital Twin API")
 
@@ -23,6 +32,7 @@ if bundle is None:
 
 history = {}   # room_id -> last readings
 last_ts = {}   # room_id -> last timestamp
+_db_ready = False
 
 
 class Reading(BaseModel):
@@ -36,6 +46,34 @@ class Reading(BaseModel):
     pir_1: int
     pir_2: int
     true_occupancy: int
+
+
+def ensure_db():
+    global _db_ready
+    if _db_ready:
+        return
+    if IS_SQLITE and engine.url.database:
+        os.makedirs(os.path.dirname(engine.url.database) or ".", exist_ok=True)
+    id_col = "INTEGER PRIMARY KEY AUTOINCREMENT" if IS_SQLITE else "SERIAL PRIMARY KEY"
+    with engine.begin() as conn:
+        conn.execute(text(f"""
+            CREATE TABLE IF NOT EXISTS readings (
+                id {id_col},
+                timestamp TEXT,
+                room_id TEXT,
+                temperature REAL,
+                light REAL,
+                sound REAL,
+                co2 REAL,
+                co2_slope REAL,
+                pir_1 INTEGER,
+                pir_2 INTEGER,
+                true_occupancy INTEGER,
+                predicted_occupancy INTEGER,
+                received_ms BIGINT
+            )
+        """))
+    _db_ready = True
 
 
 def predict_occupancy(r: Reading):
@@ -65,72 +103,53 @@ def predict_occupancy(r: Reading):
     return int(bundle["model"].predict(X)[0])
 
 
-def get_conn():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS readings (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp TEXT,
-            room_id TEXT,
-            temperature REAL,
-            light REAL,
-            sound REAL,
-            co2 REAL,
-            co2_slope REAL,
-            pir_1 INTEGER,
-            pir_2 INTEGER,
-            true_occupancy INTEGER,
-            predicted_occupancy INTEGER,
-            received_ms INTEGER
-        )
-        """
-    )
-    existing = {row["name"] for row in conn.execute("PRAGMA table_info(readings)")}
-    for col in ("predicted_occupancy", "received_ms"):
-        if col not in existing:
-            conn.execute(f"ALTER TABLE readings ADD COLUMN {col} INTEGER")
-    return conn
-
-
 @app.post("/readings")
 def add_reading(reading: Reading):
+    ensure_db()
     predicted = predict_occupancy(reading)
-    conn = get_conn()
-    conn.execute(
-        """
-        INSERT INTO readings
-        (timestamp, room_id, temperature, light, sound, co2, co2_slope,
-         pir_1, pir_2, true_occupancy, predicted_occupancy, received_ms)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            reading.timestamp, reading.room_id, reading.temperature, reading.light,
-            reading.sound, reading.co2, reading.co2_slope, reading.pir_1,
-            reading.pir_2, reading.true_occupancy, predicted, int(time.time() * 1000),
-        ),
-    )
-    conn.commit()
-    conn.close()
+    params = reading.model_dump()
+    params["predicted_occupancy"] = predicted
+    params["received_ms"] = int(time.time() * 1000)
+    with engine.begin() as conn:
+        conn.execute(text("""
+            INSERT INTO readings
+            (timestamp, room_id, temperature, light, sound, co2, co2_slope,
+             pir_1, pir_2, true_occupancy, predicted_occupancy, received_ms)
+            VALUES
+            (:timestamp, :room_id, :temperature, :light, :sound, :co2, :co2_slope,
+             :pir_1, :pir_2, :true_occupancy, :predicted_occupancy, :received_ms)
+        """), params)
     return {"status": "stored", "predicted_occupancy": predicted}
 
 
 @app.get("/readings/latest")
 def latest_reading():
-    conn = get_conn()
-    row = conn.execute("SELECT * FROM readings ORDER BY id DESC LIMIT 1").fetchone()
-    conn.close()
+    ensure_db()
+    with engine.connect() as conn:
+        row = conn.execute(text("SELECT * FROM readings ORDER BY id DESC LIMIT 1")).mappings().first()
     return dict(row) if row else {"message": "no data yet"}
 
 
 @app.get("/readings")
 def list_readings(limit: int = 20):
-    conn = get_conn()
-    rows = conn.execute("SELECT * FROM readings ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
-    conn.close()
+    ensure_db()
+    with engine.connect() as conn:
+        rows = conn.execute(text("SELECT * FROM readings ORDER BY id DESC LIMIT :limit"),
+                            {"limit": limit}).mappings().all()
     return [dict(r) for r in rows]
 
 
-# Serves the 3D dashboard at http://127.0.0.1:8000/dashboard/
+@app.get("/health")
+def health():
+    db_ok = True
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+    except Exception:
+        db_ok = False
+    return {"status": "ok" if db_ok else "degraded",
+            "model_loaded": bundle is not None, "database": db_ok}
+
+
+# Serves the 3D dashboard at /dashboard/
 app.mount("/dashboard", StaticFiles(directory="twin/dashboard", html=True), name="dashboard")

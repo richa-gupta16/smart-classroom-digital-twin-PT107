@@ -1,0 +1,12 @@
+.venv
+venv
+.git
+__pycache__
+*.pyc
+backend/twin.db
+ml/occupancy_model.joblib
+docs
+simulation
+data/datatest.txt
+data/datatest2.txt
+data/datatraining.txt

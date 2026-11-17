@@ -13,6 +13,6 @@ COPY twin/ twin/
 # Train the model inside the image so it matches the library versions in the container
 RUN python ml/save_model.py
 
-ENV DB_PATH=/data/twin.db
+ENV DATABASE_URL=sqlite:////data/twin.db
 EXPOSE 8000
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

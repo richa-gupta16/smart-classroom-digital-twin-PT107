@@ -223,3 +223,6 @@ __pycache__/
 .venv/
 venv/
 .env
+.env.local
+.neon
+node_modules/

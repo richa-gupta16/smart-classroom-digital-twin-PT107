@@ -9,10 +9,13 @@
            color: #fff; padding: 12px 16px; border-radius: 8px; font-size: 14px; line-height: 1.6; min-width: 260px; }
   #panel h3 { margin: 0 0 6px 0; font-size: 16px; }
   .on { color: #7CFC9A; } .off { color: #ff8a80; }
+  #ceilingBtn { position: absolute; top: 12px; right: 12px; padding: 8px 14px; border: 0; border-radius: 6px;
+              background: #0e7c86; color: #fff; font-size: 14px; cursor: pointer; }
 </style>
 </head>
 <body>
 <div id="panel">Waiting for data...</div>
+<button id="ceilingBtn">Show ceiling</button>
 
 <script type="importmap">
 { "imports": {
@@ -47,6 +50,7 @@ scene.add(new THREE.AmbientLight(0xffffff, 0.45));
 
 // ---------- Things the live data controls ----------
 const lightMeshes = [], lightSources = [], acMeshes = [], people = [];
+const ceilingObjs = [];
 let modelStatus = 'loading room...';
 let lastRow = null;
 
@@ -123,7 +127,10 @@ function useModel(root) {
 
   all.forEach(o => {
     const n = (o.name || '').toLowerCase();
-    if (/^(light[_.\- ]?\d+|led[_.\- ]?ceiling[_.\- ]?panel)/.test(n)) {
+    if (/^ceiling[_.\- ]?canopy/.test(n)) {
+      ceilingObjs.push(o);
+      o.visible = false;
+    } else if (/^(light[_.\- ]?\d+|led[_.\- ]?ceiling[_.\- ]?panel)/.test(n)) {
       lightMeshes.push(...meshesOf(o));
       const pos = new THREE.Vector3(); o.getWorldPosition(pos);
       addCeilingLight(pos.x, pos.y - 0.3, pos.z);
@@ -143,7 +150,7 @@ function useModel(root) {
   const center = box.getCenter(new THREE.Vector3());
   controls.target.copy(center);
   const d = Math.max(size.x, size.y, size.z) * 1.6;
-  camera.position.set(center.x + d * 0.8, center.y + d * 0.7, center.z + d * 0.9);
+  camera.position.set(center.x + d * 0.5, center.y + d * 1.0, center.z + d * 0.75);
   controls.update();
 
   ensurePeople(box);
@@ -161,6 +168,13 @@ new GLTFLoader().load(
 
 // ---------- Live updates ----------
 const panel = document.getElementById('panel');
+const ceilingBtn = document.getElementById('ceilingBtn');
+let ceilingShown = false;
+ceilingBtn.onclick = () => {
+  ceilingShown = !ceilingShown;
+  ceilingObjs.forEach(o => { o.visible = ceilingShown; });
+  ceilingBtn.textContent = ceilingShown ? 'Hide ceiling' : 'Show ceiling';
+};
 let lastId = null;
 const latencies = [];
 
@@ -189,16 +203,16 @@ function applyState(r) {
     Update delay (n=${latencies.length}): avg ${avg.toFixed(0)} ms, max ${max.toFixed(0)} ms<br>
     <small>Room: ${modelStatus}</small>`;
 }
-
+let firstSeen = true;
 async function poll() {
-  try {
-    const r = await (await fetch('/readings/latest')).json();
-    if (r.id !== undefined && r.id !== lastId) {
       lastId = r.id;
-      if (r.received_ms) latencies.push(Date.now() - r.received_ms);
+      if (firstSeen) {
+        firstSeen = false;          // the first row was stored before this page opened, so skip it
+      } else if (r.received_ms) {
+        const d = Date.now() - r.received_ms;
+        if (d >= 0 && d < 60000) latencies.push(d);
+      }
       applyState(r);
-    }
-  } catch (e) { /* server not running yet */ }
 }
 setInterval(poll, 300);
 

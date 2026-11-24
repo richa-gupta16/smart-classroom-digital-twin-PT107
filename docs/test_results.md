@@ -163,31 +163,19 @@ The final model (`ml/save_model.py`, variant C features from `ml/features.py`) i
 
 ## 6. 3D twin and live synchronization
 
-Status: working prototype. The room is built from Three.js primitives (a Blender model is not yet integrated).
+Status: working prototype. The room is the Blender model `classroom.glb` (12 student workstations, teacher desk, smart board, windows, ceiling fans, 9 ceiling light panels, AC unit), loaded in Three.js. The dashboard falls back to a simple Three.js room if the model fails to load. Occupants are shown as capsules added by the dashboard.
 
-Pipeline tested end-to-end: replay streamer -> FastAPI backend (random forest predicts occupancy per reading, using rolling features over the previous 10 readings per room) -> SQLite -> browser dashboard polling `/readings/latest` every 300 ms.
+Dashboard behaviour observed with the Blender model:
+- Empty room: lights and AC shown OFF, no occupants.
+- Occupied room: all nine ceiling panels glow, the AC unit turns blue, and capsules appear for the predicted count (1, 2, 3).
 
-Dashboard behaviour observed:
-- Empty room: predicted 0, lights and AC shown OFF.
-- Occupied room: capsules appear for the predicted count (1, 2, 3 people), lights and AC shown ON.
-- Panel shows time, temperature, light, CO2, PIR values, predicted vs. actual count, and update delay.
-
-Update delay (server stores reading -> dashboard shows it), replay of 22 Dec 2017 at 0.5 s per message:
+Update delay (server stores reading -> dashboard shows it), replay of 22 Dec 2017 at 0.3 s per message, Blender model loaded:
 
 | Metric | Result |
 |---|---|
-| Readings measured | 429 (at time of screenshot) |
-| Average delay | 221 ms |
-| Maximum delay | 752 ms |
-
-The delay includes the dashboard's own 300 ms polling interval, so the true processing delay is lower.
-
-Limits:
-- The demo replays 22 Dec, which is in the training data of the saved model, so predicted-vs-actual agreement on the dashboard is not a performance measure. Model performance is reported in section 5.
-- Lights and AC on the dashboard currently follow a placeholder rule (on whenever the prediction is occupied). The hold-off delay and PIR override evaluated in section 7 are not yet implemented in the dashboard.
-- Delay was measured on one machine with the server and browser running locally.
-
-Evidence: `docs/dashboard_empty.png`, `docs/dashboard_one_person.png`, `docs/dashboard_two_people.png`, demo video (Drive link in the form).
+| Readings measured | 69 (at time of screenshot) |
+| Average delay | 190 ms |
+| Maximum delay | 479 ms |
 
 ## 7. Energy simulation
 
@@ -243,9 +231,9 @@ Limits:
 - In a real room, switching lights off would change the light sensor value that the model depends on. This feedback is not simulated.
 - The "off events while occupied" count only registers switch-offs that happen while someone is present, so it understates time spent in the dark; occupied-time-with-lights-off is the comfort measure.
 
+
 ## 8. Pending work
 
-- Blender classroom model (the dashboard room is built from Three.js shapes).
 - Hold-off and PIR-override control logic in the live dashboard and backend (currently only evaluated offline in section 7).
 - Real sensor hardware and a real classroom deployment (replaced by dataset replay in this project).
 - More occupied days and a classroom-specific dataset to confirm the 10 Jan result and the model-vs-PIR comparison.

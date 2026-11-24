@@ -81,7 +81,7 @@ function ensurePeople(box) {
   const spots = [[-0.33, -0.17], [0.11, 0.10], [0.33, 0.37]];
   while (people.length < 3) {
     const [fx, fz] = spots[people.length];
-    const p = new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 0.8, 4, 8), mat(0x4aa3ff));
+    const p = new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 0.8, 4, 8), mat(0xff8a3d));
     p.position.set(center.x + fx * size.x, box.min.y + 0.65, center.z + fz * size.z);
     p.visible = false;
     scene.add(p);

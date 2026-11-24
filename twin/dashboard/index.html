@@ -10,7 +10,7 @@
   #panel h3 { margin: 0 0 6px 0; font-size: 16px; }
   .on { color: #7CFC9A; } .off { color: #ff8a80; }
   #ceilingBtn { position: absolute; top: 12px; right: 12px; padding: 8px 14px; border: 0; border-radius: 6px;
-              background: #0e7c86; color: #fff; font-size: 14px; cursor: pointer; }
+                background: #0e7c86; color: #fff; font-size: 14px; cursor: pointer; }
 </style>
 </head>
 <body>
@@ -129,7 +129,7 @@ function useModel(root) {
     const n = (o.name || '').toLowerCase();
     if (/^ceiling[_.\- ]?canopy/.test(n)) {
       ceilingObjs.push(o);
-      o.visible = false;
+      o.visible = false;                       // hidden by default so the room is visible
     } else if (/^(light[_.\- ]?\d+|led[_.\- ]?ceiling[_.\- ]?panel)/.test(n)) {
       lightMeshes.push(...meshesOf(o));
       const pos = new THREE.Vector3(); o.getWorldPosition(pos);
@@ -155,7 +155,7 @@ function useModel(root) {
 
   ensurePeople(box);
   modelStatus = `Blender model (lights ${found.lights}, AC ${found.ac}, people ${found.people})`;
-  if (found.lights === 0) console.warn('No objects named light_1, light_2, ... found in classroom.glb');
+  if (found.lights === 0) console.warn('No light objects found in classroom.glb');
   if (found.ac === 0) console.warn('No object named ac_unit found in classroom.glb');
 }
 
@@ -166,7 +166,7 @@ new GLTFLoader().load(
   (err) => { console.warn('Could not load classroom.glb, using built-in room', err); buildPrimitiveRoom(); if (lastRow) applyState(lastRow); }
 );
 
-// ---------- Live updates ----------
+// ---------- Panel, ceiling button, live updates ----------
 const panel = document.getElementById('panel');
 const ceilingBtn = document.getElementById('ceilingBtn');
 let ceilingShown = false;
@@ -175,7 +175,9 @@ ceilingBtn.onclick = () => {
   ceilingObjs.forEach(o => { o.visible = ceilingShown; });
   ceilingBtn.textContent = ceilingShown ? 'Hide ceiling' : 'Show ceiling';
 };
+
 let lastId = null;
+let firstSeen = true;
 const latencies = [];
 
 function applyState(r) {
@@ -203,16 +205,21 @@ function applyState(r) {
     Update delay (n=${latencies.length}): avg ${avg.toFixed(0)} ms, max ${max.toFixed(0)} ms<br>
     <small>Room: ${modelStatus}</small>`;
 }
-let firstSeen = true;
+
 async function poll() {
+  try {
+    const r = await (await fetch('/readings/latest')).json();
+    if (r.id !== undefined && r.id !== lastId) {
       lastId = r.id;
       if (firstSeen) {
-        firstSeen = false;          // the first row was stored before this page opened, so skip it
+        firstSeen = false;          // first row was stored before this page opened, so skip it
       } else if (r.received_ms) {
         const d = Date.now() - r.received_ms;
         if (d >= 0 && d < 60000) latencies.push(d);
       }
       applyState(r);
+    }
+  } catch (e) { console.warn('poll error:', e); }
 }
 setInterval(poll, 300);
 

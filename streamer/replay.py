@@ -28,12 +28,13 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--delay", type=float, default=0.5, help="seconds between messages")
     parser.add_argument("--limit", type=int, default=20, help="number of rows to send")
+    parser.add_argument("--start", type=int, default=0, help="first row to send")
     parser.add_argument("--post", type=str, default=None,
                         help="backend URL, e.g. http://127.0.0.1:8000/readings")
     args = parser.parse_args()
 
     df = pd.read_csv(DATA_PATH)
-    for _, row in df.head(args.limit).iterrows():
+    for _, row in df.iloc[args.start:args.start + args.limit].iterrows():
         message = build_message(row)
         print(json.dumps(message))
         if args.post:

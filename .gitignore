@@ -227,3 +227,4 @@ venv/
 .neon
 node_modules/
 test_twin.db
+twin/*.blend
